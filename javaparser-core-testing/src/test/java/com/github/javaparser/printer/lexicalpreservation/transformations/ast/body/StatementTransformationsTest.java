@@ -21,23 +21,25 @@
 
 package com.github.javaparser.printer.lexicalpreservation.transformations.ast.body;
 
+import static com.github.javaparser.StaticJavaParser.parseStatement;
+
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.printer.lexicalpreservation.AbstractLexicalPreservingTest;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
 import org.junit.jupiter.api.*;
-
-import static com.github.javaparser.StaticJavaParser.parseStatement;
 
 /**
  * Transforming Statement and verifying the LexicalPreservation works as expected.
  */
 class StatementTransformationsTest extends AbstractLexicalPreservingTest {
 
-    private static final ParserConfiguration.LanguageLevel storedLanguageLevel = StaticJavaParser.getParserConfiguration().getLanguageLevel();
+    private static final ParserConfiguration.LanguageLevel storedLanguageLevel =
+            StaticJavaParser.getParserConfiguration().getLanguageLevel();
 
     @BeforeEach
     public void setLanguageLevel() {
@@ -113,5 +115,16 @@ class StatementTransformationsTest extends AbstractLexicalPreservingTest {
         NodeList<Statement> statements = stmt.asSwitchStmt().getEntry(0).getStatements();
         statements.set(0, statements.get(0).clone());
         assertTransformedToString(code, stmt);
+    }
+
+    @Test
+    void switchWithRecordPatternPreserved() {
+        String code = "switch (a) { case OldBox (TwoBox(String s, Box (Integer i))) -> System.out.println(i); }";
+        Statement stmt = consider(code);
+        NodeList<SwitchEntry> entries = stmt.asSwitchStmt().getEntries();
+        entries.get(0).getLabels().get(0).asRecordPatternExpr().setType("NewBox");
+        NodeList<Statement> statements = stmt.asSwitchStmt().getEntry(0).getStatements();
+        statements.set(0, statements.get(0).clone());
+        assertTransformedToString(code.replaceAll("OldBox", "NewBox"), stmt);
     }
 }

@@ -21,23 +21,22 @@
 
 package com.github.javaparser.resolution.declarations;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public interface ResolvedPatternDeclarationTest extends ResolvedValueDeclarationTest {
+import org.junit.jupiter.api.Test;
+
+public interface ResolvedTypePatternDeclarationTest extends ResolvedValueDeclarationTest {
 
     @Override
-    ResolvedPatternDeclaration createValue();
+    ResolvedTypePatternDeclaration createValue();
 
     @Test
     default void resolvedPatternShouldBeMarkedAsPattern() {
-        assertTrue(createValue().isPattern());
+        assertTrue(createValue().isTypePattern());
     }
 
     @Test
     default void resolvedPatternShouldHaveAName() {
         assertTrue(createValue().hasName());
     }
-
 }

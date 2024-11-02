@@ -3316,6 +3316,19 @@ Expression EqualityExpression():
     { return ret; }
 }
 
+PatternExpr PatternExpression():
+{
+    PatternExpr ret;
+}
+{
+	(
+		LOOKAHEAD(TypePatternExpression())
+		ret = TypePatternExpression()
+	  |
+	    ret = RecordPatternExpression()
+	)
+    { return ret; }
+}
 
 /**
  * https://openjdk.java.net/jeps/375
@@ -3325,17 +3338,62 @@ Expression EqualityExpression():
  *         ReferenceType Identifier
  * }<pre>
  */
-PatternExpr PatternExpression():
+TypePatternExpr TypePatternExpression():
 {
     ModifierHolder modifier;
-    ReferenceType type;
+    Type type;
     SimpleName name;
 }
 {
     modifier = Modifiers()
-    type = ReferenceType(modifier.annotations)
+    type = Type(modifier.annotations)
     name = SimpleName()
-    { return new PatternExpr(range(type, token()), modifier.modifiers, type, name); }
+    { return new TypePatternExpr(range(type, token()), modifier.modifiers, type, name); }
+}
+
+/**
+ * https://openjdk.org/jeps/440
+ * <pre><code>
+ * RecordPattern:
+ *     ReferenceType ( [PatternList] )
+ * PatternList:
+ *     Pattern {, Pattern }
+ * </code></pre>
+ */
+RecordPatternExpr RecordPatternExpression():
+{
+	ModifierHolder modifier;
+	ReferenceType type;
+	NodeList<PatternExpr> patternList;
+}
+{
+	modifier = Modifiers()
+	type = ReferenceType(modifier.annotations)
+	patternList = PatternList()
+	{ return new RecordPatternExpr(range(type, token()), modifier.modifiers, type, patternList); }
+}
+
+/**
+ * https://openjdk.org/jeps/440
+ * <pre><code>
+ * PatternList:
+ *     Pattern {, Pattern }
+ * </code></pre>
+ */
+NodeList<PatternExpr> PatternList():
+{
+    PatternExpr pattern;
+	NodeList<PatternExpr> ret = new NodeList<>();
+}
+{
+	"("
+    pattern = PatternExpression() { ret.add(pattern); }
+    (
+        ","
+        pattern = PatternExpression() { ret.add(pattern); }
+    )*
+	")"
+    { return ret; }
 }
 
 
@@ -3366,7 +3424,10 @@ Expression InstanceOfExpression():
         (
             LOOKAHEAD(PatternExpression())
             pattern = PatternExpression()
-            { ret = new InstanceOfExpr(range(ret, token()), ret, pattern.getType(), pattern); }
+            // From the JLS https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-Pattern, the type of
+            // a top-level pattern must be a reference type. This means that converting the pattern type to a
+            // reference type here is always safe if the code being parsed compiles.
+            { ret = new InstanceOfExpr(range(ret, token()), ret, pattern.getType().asReferenceType(), pattern); }
          |
             type = AnnotatedReferenceType()
             { ret = new InstanceOfExpr(range(ret, token()), ret, type, null); }
@@ -4603,6 +4664,7 @@ SwitchEntry SwitchEntry():
     JavaToken begin;
     SwitchEntry ret;
     Statement stmt = null;
+    Expression expr = null;
     boolean isDefault = false;
     Expression guard = null;
 }
@@ -4630,7 +4692,7 @@ SwitchEntry SwitchEntry():
             * This lookahead is necessary to avoid ambiguity with the ConditionalExpression branch
             * below.
             */
-            LOOKAHEAD(3)
+            LOOKAHEAD(PatternExpression())
             label = PatternExpression() { labels = add(labels, label); }
             [
               "when"
@@ -4653,12 +4715,16 @@ SwitchEntry SwitchEntry():
      |
         "->"
         (
-            stmt = StatementExpression()
-            {
-                TokenRange r=range(begin, token());
-                stmts.add(stmt);
-                ret = new SwitchEntry(r, labels, EXPRESSION, stmts, isDefault, guard);
-            }
+            (
+                expr = Expression()
+                {
+                    TokenRange r=range(begin, token());
+                    // expr.getTokenRange() will not be present if storeTokens is false
+                    stmts.add(new ExpressionStmt(expr.getTokenRange().orElse(null), expr));
+                    ret = new SwitchEntry(r, labels, EXPRESSION, stmts, isDefault, guard);
+                }
+                ";"
+            )
          |
             stmt = Block()
             {
@@ -5537,6 +5603,10 @@ NodeList<BodyDeclaration<?>> AnnotationTypeBody():
  *         (one of)
  *         Annotation public
  *         abstract
+ *     ClassDeclaration:
+ *         NormalClassDeclaration
+ *         EnumDeclaration
+ *         RecordDeclaration
  * }<pre>
  * For Convenience:
  * <pre>{@code
@@ -5552,6 +5622,10 @@ BodyDeclaration<?> AnnotationBodyDeclaration():
 {
     modifier = Modifiers()
     (
+        // This case must be checked before AnnotationTypeMemberDeclaration since the prefixes are the same
+        LOOKAHEAD(RecordDeclaration())
+        ret = RecordDeclaration(modifier)
+     |
         LOOKAHEAD(Type() Identifier() "(")
         ret = AnnotationTypeMemberDeclaration(modifier)
      |

@@ -536,7 +536,7 @@ public abstract class GenericVisitorWithDefaults<R, A> implements GenericVisitor
     }
 
     @Override
-    public R visit(final PatternExpr n, final A arg) {
+    public R visit(final TypePatternExpr n, final A arg) {
         return defaultAction(n, arg);
     }
 
@@ -547,6 +547,11 @@ public abstract class GenericVisitorWithDefaults<R, A> implements GenericVisitor
 
     @Override
     public R visit(final CompactConstructorDeclaration n, final A arg) {
+        return defaultAction(n, arg);
+    }
+
+    @Override
+    public R visit(final RecordPatternExpr n, final A arg) {
         return defaultAction(n, arg);
     }
 }
